@@ -21,150 +21,6 @@ def load_dataset_hf(split):
     dataset = iter(dataset[split])
     return dataset
 
-class PatchEmbedding(nn.Module):
-    def __init__(self, n_embd, patch_size, n_patches, dropout, n_channels) -> None:
-        super(PatchEmbedding, self).__init__()
-        self.n_embd = n_embd
-        self.patch_size = patch_size
-        self.n_patches = n_patches
-        self.dropout = dropout
-
-        self.patcher = nn.Sequential(
-                    nn.Conv2d(in_channels=n_channels, 
-                        out_channels=self.n_embd, 
-                        kernel_size=self.patch_size, 
-                        stride=self.patch_size),
-                    nn.Flatten(2)
-                    )
-        self.cls_token = nn.Parameter(torch.randn(size=(1, 1, n_embd)), requires_grad=True)
-        self.pos_embedding = nn.Parameter(torch.randn(size=(1, n_patches+1, n_embd)), requires_grad=True)
-        self.dropout= nn.Dropout(self.dropout)
-
-    def forward(self, x):
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)
-        x = self.patcher(x).permute(0, 2, 1)
-        x = torch.cat([cls_token, x], dim=1)
-        x = x + self.pos_embedding
-        x = self.dropout(x)
-        return x
-
-class ViT(nn.Module):
-    def __init__(self, config, logger) -> None:
-        super(ViT, self).__init__()
-        n_embd = config.n_embd
-        patch_size = config.patch_size
-        n_heads = config.n_heads
-        dropout = config.dropout
-        n_channels = config.n_channels
-        num_classes = config.num_classes
-        n_layer = config.n_layer
-        self.device = config.device
-        input_dim = patch_size * patch_size * n_channels
-        num_patches = (config.size // patch_size) ** 2
-        self.batch_size = config.batch_size
-        self.eval_iters = config.eval_iters
-        self.eval_interval = config.eval_interval
-        self.logger = logger
-        self.config = config
-
-        self.training_transform_pipeline = Compose([
-            Resize((config.size)), 
-            RandomHorizontalFlip(), 
-            ToTensor(), 
-            expand_grayscale_to_rgb,  
-            Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-            ])
-
-        self.testing_transform_pipeline = Compose([
-            Resize((config.size)),                       # Resize the image to 224x224 pixels
-            ToTensor(),    
-            expand_grayscale_to_rgb,                 
-            Normalize(mean=[0.485, 0.456, 0.406],  # Normalize the tensor using the ImageNet mean
-                    std=[0.229, 0.224, 0.225])   # and standard deviation values
-        ])
-
-        self.embeddings = PatchEmbedding(input_dim, patch_size, num_patches, dropout, n_channels)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, nhead=n_heads, dim_feedforward=n_embd, dropout=dropout, activation= 'gelu', batch_first=True, norm_first=True)
-        self.encoder_blocks = nn.TransformerEncoder(encoder_layer, num_layers=n_layer)
-
-        self.mlp_head = nn.Sequential(
-            nn.LayerNorm(n_embd),
-            nn.Linear(n_embd, num_classes)
-        )
-
-    def forward(self, x):
-        x = self.embeddings(x)
-        x = self.encoder_blocks(x)
-        x = x[:, 0,:]
-        classification = self.mlp_head(x)
-        return classification, x
-
-    @torch.no_grad()
-    def test_model(self, dataset_test, criterion):
-        logger.info('Testing the model')
-        self.eval()
-        for _ in range(self.eval_iters):
-            images = []
-            labels = []
-            for _ in range(self.batch_size):
-                sample = next(dataset_test)
-                images.append(self.testing_transform_pipeline(sample['img']))
-                labels.append(sample['label'])
-            images = torch.stack(images).to(self.device)
-            labels = torch.tensor(labels).to(self.device)
-
-            classification, _ = self(images)
-            loss = criterion(classification, labels)
-            _, predicted = torch.max(classification, 1)
-            correct = (predicted == labels).sum().item()
-            accuracy = correct / self.batch_size
-            self.logger.info(f'Validation Loss: {loss.item()} Accuracy: {accuracy}')
-        self.train()
-
-    def train_model(self):
-        dataset_train = load_dataset_hf('train')
-        dataset_test = load_dataset_hf('test')
-        self.train()
-        self.logger.info('Training the model')
-        optimizer = optim.Adam(self.parameters(), betas=(0.9, 0.999), lr=self.config.base_lr, weight_decay=self.config.weight_decay)
-        scheduler = optim.lr_scheduler.LinearLR(optimizer)
-        criterion = nn.CrossEntropyLoss()
-        running_loss = 0.0
-        accumulation_steps = 5
-
-        for epoch in range(self.config.epochs):
-            self.train()
-            images = []
-            labels = []
-            for _ in range(self.batch_size):
-                sample = next(dataset_train)
-                images.append(self.training_transform_pipeline(sample['img']))
-                labels.append(torch.tensor(sample['label']))
-
-            images = torch.stack(images).to(self.device)
-            labels = torch.stack(labels).to(self.device)
-
-            classification, _ = self(images)
-            loss = criterion(classification, labels)
-            loss.backward()  # Accumulate gradients
-            running_loss += loss.item()
-
-            if epoch % accumulation_steps == 0:
-                optimizer.step()  # Perform a single update
-                scheduler.step()  # Scheduler update
-                optimizer.zero_grad()  # Zero the gradients after updating
-                self.logger.info(f'Epoch: {epoch} Loss: {loss.item()}')
-
-            if epoch % self.eval_interval == 0 and epoch > 0:
-                self.test_model(dataset_test, criterion)
-                # print runnign loss
-                self.logger.info(f'Epoch: {epoch} Running Loss: {running_loss/self.eval_interval}')
-                running_loss = 0.0
-
-        self.logger.info('Saving the model')
-        torch.save(self.state_dict(), f'models/vit.pth')
-        self.test_model(dataset_test, criterion)
-
 class InputEmbedding(nn.Module):
     def __init__(self, patch_size, n_channels, n_embd, batch_size, device) -> None:
         super(InputEmbedding, self).__init__()
@@ -176,11 +32,9 @@ class InputEmbedding(nn.Module):
         self.input_size = self.patch_size * self.patch_size * self.n_channels
 
         self.linearProjection = nn.Linear(self.input_size, self.n_embd)
-        # Random initialization of of [class] token that is prepended to the linear projection vector.
-        self.class_token = nn.Parameter(torch.randn(self.batch_size, 1, self.n_embd)).to(self.device)
-
-        # Positional embedding
-        self.pos_embedding = nn.Parameter(torch.randn(self.batch_size, 1, self.n_embd)).to(self.device)
+        self.class_token = nn.Parameter(torch.randn(1, 1, self.n_embd)).to(self.device)
+        num_patches = (config.size // config.patch_size) * (config.size // config.patch_size)
+        self.pos_embedding = nn.Parameter(torch.randn(1, num_patches+1, self.n_embd)).to(self.device)
 
     def forward(self, input_data):
 
@@ -193,12 +47,9 @@ class InputEmbedding(nn.Module):
         linear_projection = self.linearProjection(patches).to(self.device)
         b, n, _ = linear_projection.shape
 
-        # Prepend the [class] token to the original linear projection
-        linear_projection = torch.cat((self.class_token, linear_projection), dim=1)
-        pos_embed = einops.repeat(self.pos_embedding, 'b 1 d -> b m d', m=n+1)
-
-        # Add positional embedding to linear projection
-        linear_projection += pos_embed
+        class_tokens = self.class_token.expand(b, -1, -1)  # Expand class token for batch
+        linear_projection = torch.cat((class_tokens, linear_projection), dim=1)
+        linear_projection = linear_projection + self.pos_embedding[:, :n+1, :]
 
         return linear_projection
 
@@ -250,7 +101,7 @@ class VisionTransformer(nn.Module):
         self.n_channels = config.n_channels
         self.batch_size = config.batch_size
         self.n_heads = config.n_heads
-        self.eval_iters = config.eval_iters
+        self.eval_batch_size = config.eval_batch_size
         self.eval_interval = config.eval_interval
         self.save_interval = config.save_interval
         self.logger = logger
@@ -282,42 +133,42 @@ class VisionTransformer(nn.Module):
             nn.Linear(self.n_embd, self.num_classes)
         )
 
+        self.logger.info("Model initialized")
+
     def forward(self, test_input):
 
-        # Apply input embedding (patchify + linear projection + position embeding)
-        # to the input image passed to the model
         enc_output = self.embedding(test_input)
 
-        # Loop through all the encoder layers
         for enc_layer in self.enc_stack:
-            enc_output = enc_layer.forward(enc_output) + enc_output
+            enc_output = enc_layer.forward(enc_output)
 
-        # Extract the output embedding information of the [class] token
         cls_token_embedding = enc_output[:, 0]
 
-        # Finally, return the classification vector for all image in the batch
         return self.MLP_head(cls_token_embedding), cls_token_embedding
 
     @torch.no_grad()
     def test_model(self, dataset_test, criterion):
         logger.info('Testing the model')
         self.eval()
-        for _ in range(self.eval_iters):
-            images = []
-            labels = []
-            for _ in range(self.batch_size):
+        images = []
+        labels = []
+        for _ in range(self.eval_batch_size):
+            try:
                 sample = next(dataset_test)
-                images.append(self.testing_transform_pipeline(sample['img']))
-                labels.append(sample['label'])
-            images = torch.stack(images).to(self.device)
-            labels = torch.tensor(labels).to(self.device)
+            except StopIteration:
+                dataset_test = load_dataset_hf('train')
+                sample = next(dataset_test)
+            images.append(self.testing_transform_pipeline(sample['img']))
+            labels.append(sample['label'])
+        images = torch.stack(images).to(self.device)
+        labels = torch.tensor(labels).to(self.device)
 
-            classification, _ = self(images)
-            loss = criterion(classification, labels)
-            _, predicted = torch.max(classification, 1)
-            correct = (predicted == labels).sum().item()
-            accuracy = correct / self.batch_size
-            self.logger.info(f'Validation Loss: {loss.item()} Accuracy: {accuracy}')
+        classification, _ = self(images)
+        loss = criterion(classification, labels)
+        _, predicted = torch.max(classification, 1)
+        correct = (predicted == labels).sum().item()
+        accuracy = correct / self.eval_batch_size
+        self.logger.info(f'Validation Loss: {loss.item()} Accuracy: {accuracy}')
         self.train()
 
     def train_model(self):
@@ -329,14 +180,17 @@ class VisionTransformer(nn.Module):
         scheduler = optim.lr_scheduler.LinearLR(optimizer)
         criterion = nn.CrossEntropyLoss()
         running_loss = 0.0
-        accumulation_steps = 50
 
         for epoch in range(config.epochs):
             self.train()
             images = []
             labels = []
             for _ in range(self.batch_size):
-                sample = next(dataset_train)
+                try:
+                    sample = next(dataset_train)
+                except StopIteration:
+                    dataset_train = load_dataset_hf('train')
+                    sample = next(dataset_train)
                 images.append(self.training_transform_pipeline(sample['img']))
                 labels.append(torch.tensor(sample['label']))
 
@@ -348,13 +202,11 @@ class VisionTransformer(nn.Module):
             loss.backward()  # Accumulate gradients
             running_loss += loss.item()
 
-            if epoch % accumulation_steps == 0:
+            if epoch % self.eval_interval == 0 and epoch > 0:
                 optimizer.step()  # Perform a single update
                 scheduler.step()  # Scheduler update
                 optimizer.zero_grad()  # Zero the gradients after updating
-                self.logger.info(f'Epoch: {epoch} Loss: {loss.item()}')
-
-            if epoch % self.eval_interval == 0 and epoch > 0:
+            
                 self.test_model(dataset_test, criterion)
                 self.logger.info(f'Epoch: {epoch} Running Loss: {running_loss/self.eval_interval}')
                 running_loss = 0.0

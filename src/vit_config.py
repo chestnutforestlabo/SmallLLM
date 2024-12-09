@@ -1,7 +1,7 @@
 
 class ViTConfig():
     def __init__(self):
-        self.device = 'cpu'
+        self.device = 'cuda'
         self.patch_size = 4
         self.n_embd = 768
         self.n_channels = 3
@@ -10,12 +10,12 @@ class ViTConfig():
         self.dropout = 0.2
         self.num_classes = 10
         self.size = 32
-        self.epochs = 1000000
+        self.epochs = 10000
         self.base_lr = 10e-4
         self.weight_decay = 0.03
-        self.batch_size = 4
+        self.batch_size = 64
 
-        self.eval_iters = 5
+        self.eval_batch_size = 40
         self.eval_interval = 100
         self.save_interval = 500
 
