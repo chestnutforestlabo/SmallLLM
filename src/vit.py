@@ -13,6 +13,14 @@ def expand_grayscale_to_rgb(img):
         img = img.repeat(3, 1, 1)  # Repeat the channel to make it 3-channel
     return img
 
+def load_dataset_hf(split):
+    assert split in ['train', 'test']
+    dataset = load_dataset("cifar10", # other options: "imagenet-1k"
+                        # use_auth_token=True,
+                        streaming=True)
+    dataset = iter(dataset[split])
+    return dataset
+
 class PatchEmbedding(nn.Module):
     def __init__(self, n_embd, patch_size, n_patches, dropout, n_channels) -> None:
         super(PatchEmbedding, self).__init__()
@@ -91,15 +99,6 @@ class ViT(nn.Module):
         classification = self.mlp_head(x)
         return classification, x
 
-    def load_dataset_hf(self, split):
-        assert split in ['train', 'test']
-        self.logger.info(f'Loading the {split} image dataset')
-        dataset = load_dataset("cifar10", # other options: "imagenet-1k"
-                            use_auth_token=True,
-                            streaming=True)
-        dataset = iter(dataset[split])
-        return dataset
-
     @torch.no_grad()
     def test_model(self, dataset_test, criterion):
         logger.info('Testing the model')
@@ -123,8 +122,8 @@ class ViT(nn.Module):
         self.train()
 
     def train_model(self):
-        dataset_train = self.load_dataset_hf('train')
-        dataset_test = self.load_dataset_hf('test')
+        dataset_train = load_dataset_hf('train')
+        dataset_test = load_dataset_hf('test')
         self.train()
         self.logger.info('Training the model')
         optimizer = optim.Adam(self.parameters(), betas=(0.9, 0.999), lr=self.config.base_lr, weight_decay=self.config.weight_decay)
@@ -299,16 +298,6 @@ class VisionTransformer(nn.Module):
         # Finally, return the classification vector for all image in the batch
         return self.MLP_head(cls_token_embedding), cls_token_embedding
 
-
-    def load_dataset_hf(self, split):
-        assert split in ['train', 'test']
-        self.logger.info(f'Loading the {split} image dataset')
-        dataset = load_dataset("cifar10", # other options: "imagenet-1k"
-                            use_auth_token=True,
-                            streaming=True)
-        dataset = iter(dataset[split])
-        return dataset
-
     @torch.no_grad()
     def test_model(self, dataset_test, criterion):
         logger.info('Testing the model')
@@ -332,8 +321,8 @@ class VisionTransformer(nn.Module):
         self.train()
 
     def train_model(self):
-        dataset_train = self.load_dataset_hf('train')
-        dataset_test = self.load_dataset_hf('test')
+        dataset_train = load_dataset_hf('train')
+        dataset_test = load_dataset_hf('test')
         self.train()
         self.logger.info('Training the model')
         optimizer = optim.Adam(self.parameters(), betas=(0.9, 0.999), lr=config.base_lr, weight_decay=config.weight_decay)
