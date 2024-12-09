@@ -27,6 +27,10 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.8"
+torch = "2.1.2"
+datasets = "^3.1.0"
+huggingface = "^0.0.1"
+zstandard = "^0.23.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.1"
