@@ -1,9 +1,7 @@
 from datasets import load_dataset
-import sys
 
 # Load the dataset with streaming to handle large data efficiently
 dataset = load_dataset("oscar-corpus/OSCAR-2301",
-                       use_auth_token=True,
                        language="en",
                        streaming=True,
                        split="train")
@@ -11,7 +9,9 @@ dataset = load_dataset("oscar-corpus/OSCAR-2301",
 # Initialize variables for data collection and size tracking
 collected_data = []
 total_size_bytes = 0
-max_size_bytes = 6 * 1024 * 1024 * 1024  # 3 GB
+max_size_bytes = 1 * 1024 * 1024 * 1024
+
+print("Collecting data...")
 
 for d in dataset:
     # Assume each document's language needs to be checked
@@ -30,9 +30,11 @@ for d in dataset:
             break  # Stop if the data size limit is exceeded
         collected_data.append(d["text"])
 
+        print(f"Collected {len(collected_data)} documents, {total_size_bytes / 1024 / 1024 / 1024:.2f} GB", end="\r")
+
 # Convert list of texts to a single string for saving
-final_data = " ".join(collected_data)
+final_data = "\n".join(collected_data)
 
 # Save the data to a file
-with open('dataset/oscar_input.txt', 'w', encoding='utf-8') as f:
+with open('data/oscar_input.txt', 'w', encoding='utf-8') as f:
     f.write(final_data)

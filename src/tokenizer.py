@@ -154,10 +154,10 @@ class BPETokenizer():
 
 if __name__ == "__main__":
 
-    with open('dataset/oscar_input.txt', 'r') as f:
+    with open('data/oscar_input.txt', 'r') as f:
         text = f.read()
     logger = Logger('logs/simplelm.log', 'SimpleLM')
-    vocab_size = 1000
+    vocab_size = 10000
     bpetokenizer = BPETokenizer(text=text, vocab_size=vocab_size, logger=logger)
     print(bpetokenizer.get_tokenizer_stats())
     print(bpetokenizer.encode("hello world"))
