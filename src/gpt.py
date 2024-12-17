@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tokenizer import BPETokenizer
-from simplellm_comfig import SimpleLMConfig
+from src.simplellm_config import SimpleLMConfig
 from logger import Logger
 from datasets import load_dataset
 import json
