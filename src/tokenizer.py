@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
     with open('data/oscar_input.txt', 'r') as f:
         text = f.read()
-    logger = Logger('logs/simplelm.log', 'SimpleLM')
+    logger = Logger('logs/tokenizer.log', 'tokenizer')
     vocab_size = 10000
     bpetokenizer = BPETokenizer(text=text, vocab_size=vocab_size, logger=logger)
     print(bpetokenizer.get_tokenizer_stats())

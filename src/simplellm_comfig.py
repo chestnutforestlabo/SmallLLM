@@ -2,9 +2,9 @@ import torch
 class SimpleLMConfig:
     def __init__(self):
         self.batch_size = 32
-        self.context_length = 516
+        self.context_length = 512
         self.max_iters = 500000
-        self.eval_interval = 100
+        self.eval_interval = 10000
         self.save_interval = 5000
         self.learning_rate = 3e-4
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'

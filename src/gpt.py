@@ -176,11 +176,10 @@ class SimpleLM(nn.Module):
             while len(token_sample)*0.9 < self.context_length * 2:
                 try:
                     text = next(dataset)["text"]
-                    token_sample = bpetokenizer.encode(text)
                 except StopIteration:
                     dataset = self.load_dataset_hf()
                     text = next(dataset)["text"]
-                    token_sample = bpetokenizer.encode(text)
+                token_sample = bpetokenizer.encode(text)
 
             train_data = torch.tensor(token_sample[:int(len(token_sample)*0.9)], dtype=torch.long)
             valid_data = torch.tensor(token_sample[int(len(token_sample)*0.9):], dtype=torch.long)
@@ -197,6 +196,7 @@ class SimpleLM(nn.Module):
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            self.logger.info(f'iter {iter}: loss {loss.item()}')
             
         if self.logger is not None:
             self.logger.info(f'iter {iter}: train loss {losses["train"]}, val loss {losses["val"]}')    
@@ -205,7 +205,7 @@ class SimpleLM(nn.Module):
     def load_dataset_hf(self):
         logger.info('Loading the text')
         dataset = load_dataset("oscar-corpus/OSCAR-2301",
-                            use_auth_token=True,
+                            # use_auth_token=True,
                             language="en",
                             streaming=True,
                             split="train")
