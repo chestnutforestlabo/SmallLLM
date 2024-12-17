@@ -1,0 +1,1 @@
+poetry run huggingface-cli login --token $HF_TOKEN
