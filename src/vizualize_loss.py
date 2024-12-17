@@ -1,7 +1,7 @@
 
 import json
 import matplotlib.pyplot as plt
-from simplellm_comfig import SimpleLMConfig
+from src.simplellm_config import SimpleLMConfig
 
 def load_data(filepath):
     with open(filepath, 'r') as file:

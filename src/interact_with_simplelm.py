@@ -1,6 +1,6 @@
 import torch
 from tokenizer import BPETokenizer
-from simplellm_comfig import SimpleLMConfig
+from src.simplellm_config import SimpleLMConfig
 from gpt import SimpleLM
 
 
